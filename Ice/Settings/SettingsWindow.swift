@@ -11,6 +11,7 @@ struct SettingsWindow: Scene {
     var body: some Scene {
         Window(Constants.settingsWindowTitle, id: Constants.settingsWindowID) {
             SettingsView()
+                .environment(\.locale, BarextenderLocalization.locale)
                 .readWindow { window in
                     guard let window else {
                         return
@@ -21,7 +22,7 @@ struct SettingsWindow: Scene {
         }
         .commandsRemoved()
         .windowResizability(.contentSize)
-        .defaultSize(width: 900, height: 625)
+        .defaultSize(width: 900, height: 675)
         .environmentObject(appState)
         .environmentObject(appState.navigationState)
     }

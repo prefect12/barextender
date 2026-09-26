@@ -130,6 +130,12 @@ struct MenuBarItem {
         self.info = MenuBarItemInfo(uncheckedItemWindow: itemWindow)
     }
 
+    /// Creates the settings-only insertion marker; never pass it to native events.
+    init(layoutMarkerWindow window: WindowInfo) {
+        self.window = window
+        self.info = .newItems
+    }
+
     /// Creates a menu bar item.
     ///
     /// The parameters passed into this initializer are verified during the menu
@@ -207,13 +213,14 @@ extension MenuBarItem {
 // MARK: MenuBarItem: Equatable
 extension MenuBarItem: Equatable {
     static func == (lhs: MenuBarItem, rhs: MenuBarItem) -> Bool {
-        lhs.window == rhs.window
+        lhs.info == rhs.info && lhs.window == rhs.window
     }
 }
 
 // MARK: MenuBarItem: Hashable
 extension MenuBarItem: Hashable {
     func hash(into hasher: inout Hasher) {
+        hasher.combine(info)
         hasher.combine(window)
     }
 }

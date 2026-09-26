@@ -17,9 +17,9 @@ final class MenuBarSection {
         /// A string to show in the interface.
         var displayString: String {
             switch self {
-            case .visible: "Visible"
-            case .hidden: "Hidden"
-            case .alwaysHidden: "Always-Hidden"
+            case .visible: BarextenderLocalization.string("Visible")
+            case .hidden: BarextenderLocalization.string("Hidden")
+            case .alwaysHidden: BarextenderLocalization.string("Always-Hidden")
             }
         }
 
@@ -51,7 +51,7 @@ final class MenuBarSection {
 
     /// A Boolean value that indicates whether the Ice Bar should be used.
     private var useIceBar: Bool {
-        appState?.settingsManager.generalSettingsManager.useIceBar ?? false
+        appState?.settingsManager.generalSettingsManager.shouldUseIceBar(on: screenForIceBar) ?? false
     }
 
     /// A weak reference to the menu bar manager's Ice Bar panel.
@@ -61,14 +61,7 @@ final class MenuBarSection {
 
     /// The best screen to show the Ice Bar on.
     private weak var screenForIceBar: NSScreen? {
-        guard let appState else {
-            return nil
-        }
-        if appState.isActiveSpaceFullscreen {
-            return NSScreen.screenWithMouse ?? NSScreen.main
-        } else {
-            return NSScreen.main
-        }
+        NSScreen.screenWithMouse ?? NSScreen.main
     }
 
     /// A Boolean value that indicates whether the section is hidden.
@@ -143,18 +136,16 @@ final class MenuBarSection {
         switch name {
         case .visible where useIceBar, .hidden where useIceBar:
             Task {
-                if let screenForIceBar {
-                    await iceBarPanel?.show(section: .hidden, on: screenForIceBar)
-                }
+                guard let screenForIceBar,
+                      await iceBarPanel?.show(section: .hidden, on: screenForIceBar) == true else { return }
                 for section in appState.menuBarManager.sections {
                     section.controlItem.state = .hideItems
                 }
             }
         case .alwaysHidden where useIceBar:
             Task {
-                if let screenForIceBar {
-                    await iceBarPanel?.show(section: .alwaysHidden, on: screenForIceBar)
-                }
+                guard let screenForIceBar,
+                      await iceBarPanel?.show(section: .alwaysHidden, on: screenForIceBar) == true else { return }
                 for section in appState.menuBarManager.sections {
                     section.controlItem.state = .hideItems
                 }
@@ -192,6 +183,7 @@ final class MenuBarSection {
     func hide() {
         guard
             let appState,
+            !appState.menuBarManager.screenRuleIsShowingAll,
             !isHidden
         else {
             return

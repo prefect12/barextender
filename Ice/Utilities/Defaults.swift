@@ -144,6 +144,7 @@ extension Defaults {
         case iceIcon = "IceIcon"
         case customIceIconIsTemplate = "CustomIceIconIsTemplate"
         case useIceBar = "UseIceBar"
+        case useIceBarOnlyOnNotchedScreens = "UseIceBarOnlyOnNotchedScreens"
         case showOnClick = "ShowOnClick"
         case showOnHover = "ShowOnHover"
         case showOnScroll = "ShowOnScroll"
@@ -151,10 +152,14 @@ extension Defaults {
         case autoRehide = "AutoRehide"
         case rehideStrategy = "RehideStrategy"
         case rehideInterval = "RehideInterval"
+        case showAllOnWideScreen = "ShowAllOnWideScreen"
+        case showAllScreenWidthThreshold = "ShowAllScreenWidthThreshold"
 
-        // MARK: Hotkey Settings
+        // MARK: Menu Bar Layout
 
-        case hotkeys = "Hotkeys"
+        case newMenuBarItemPlacement = "NewMenuBarItemPlacement"
+        case menuBarItemLedger = "MenuBarItemLedger"
+        case menuBarPaletteItems = "MenuBarPaletteItems"
 
         // MARK: Advanced Settings
 

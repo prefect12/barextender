@@ -94,6 +94,7 @@ private final class MenuBarAppearanceEditorPopover: NSPopover {
                     self?.performClose(self)
                 })
             )
+            .environment(\.locale, BarextenderLocalization.locale)
             .environmentObject(appState)
             .environmentObject(appState.appearanceManager)
         }

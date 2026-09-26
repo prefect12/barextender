@@ -16,6 +16,7 @@ final class IceBarPanel: NSPanel {
     private lazy var colorManager = IceBarColorManager(iceBarPanel: self)
 
     private var cancellables = Set<AnyCancellable>()
+    private var presentationRequest = MenuBarPresentationRequest()
 
     init(appState: AppState) {
         super.init(
@@ -25,7 +26,7 @@ final class IceBarPanel: NSPanel {
             defer: false
         )
         self.appState = appState
-        self.title = "Ice Bar"
+        self.title = BarextenderLocalization.string("Barextender Bar")
         self.titlebarAppearsTransparent = true
         self.isMovableByWindowBackground = true
         self.allowsToolTipsWhenApplicationIsInactive = true
@@ -151,24 +152,35 @@ final class IceBarPanel: NSPanel {
         setFrameOrigin(getOrigin(for: appState.settingsManager.generalSettingsManager.iceBarLocation))
     }
 
-    func show(section: MenuBarSection.Name, on screen: NSScreen) async {
+    @discardableResult
+    func show(section: MenuBarSection.Name, on screen: NSScreen, itemFilter: [MenuBarItemInfo]? = nil) async -> Bool {
         guard let appState else {
-            return
+            return false
         }
+        let request = presentationRequest.begin()
 
         // Important that we set the navigation state and current section before updating the cache.
         appState.navigationState.isIceBarPresented = true
         currentSection = section
 
         await appState.itemManager.cacheItemsIfNeeded()
+        guard presentationRequest.isCurrent(request) else {
+            return false
+        }
 
         if ScreenCapture.cachedCheckPermissions() {
             await appState.imageCache.updateCache()
         }
+        guard presentationRequest.isCurrent(request) else {
+            return false
+        }
 
-        contentView = IceBarHostingView(appState: appState, colorManager: colorManager, screen: screen, section: section) { [weak self] in
+        let hostingView = IceBarHostingView(appState: appState, colorManager: colorManager, screen: screen, section: section, itemFilter: itemFilter) { [weak self] in
             self?.close()
         }
+        contentView = hostingView
+        hostingView.layoutSubtreeIfNeeded()
+        setContentSize(hostingView.fittingSize)
 
         updateOrigin(for: screen)
 
@@ -179,9 +191,11 @@ final class IceBarPanel: NSPanel {
         colorManager.updateAllProperties(with: frame, screen: screen)
 
         orderFrontRegardless()
+        return true
     }
 
     override func close() {
+        presentationRequest.cancel()
         super.close()
         contentView = nil
         currentSection = nil
@@ -201,10 +215,12 @@ private final class IceBarHostingView: NSHostingView<AnyView> {
         colorManager: IceBarColorManager,
         screen: NSScreen,
         section: MenuBarSection.Name,
+        itemFilter: [MenuBarItemInfo]?,
         closePanel: @escaping () -> Void
     ) {
         super.init(
-            rootView: IceBarContentView(screen: screen, section: section, closePanel: closePanel)
+            rootView: IceBarContentView(screen: screen, section: section, itemFilter: itemFilter, closePanel: closePanel)
+                .environment(\.locale, BarextenderLocalization.locale)
                 .environmentObject(appState)
                 .environmentObject(appState.imageCache)
                 .environmentObject(appState.itemManager)
@@ -242,10 +258,13 @@ private struct IceBarContentView: View {
 
     let screen: NSScreen
     let section: MenuBarSection.Name
+    let itemFilter: [MenuBarItemInfo]?
     let closePanel: () -> Void
 
     private var items: [MenuBarItem] {
-        itemManager.itemCache.managedItems(for: section)
+        let available = itemManager.itemCache.managedItems(for: section)
+        guard let itemFilter else { return available }
+        return itemFilter.compactMap { info in available.first { $0.info == info } }
     }
 
     private var configuration: MenuBarAppearanceConfigurationV2 {
@@ -261,7 +280,7 @@ private struct IceBarContentView: View {
     }
 
     private var contentHeight: CGFloat? {
-        guard let menuBarHeight = imageCache.menuBarHeight ?? screen.getMenuBarHeight() else {
+        guard let menuBarHeight = screen.getMenuBarHeight() ?? imageCache.menuBarHeight else {
             return nil
         }
         if configuration.shapeKind != .none && configuration.isInset && screen.hasNotch {
@@ -301,7 +320,7 @@ private struct IceBarContentView: View {
             }
         }
         .padding(5)
-        .frame(maxWidth: imageCache.screen?.frame.width)
+        .frame(maxWidth: screen.frame.width)
         .fixedSize()
         .onFrameChange(update: $frame)
     }
@@ -310,34 +329,37 @@ private struct IceBarContentView: View {
     private var content: some View {
         if !ScreenCapture.cachedCheckPermissions() {
             HStack {
-                Text("The Ice Bar requires screen recording permissions.")
+                Text("The Barextender Bar requires screen recording permissions.")
 
                 Button {
                     closePanel()
                     appState.navigationState.settingsNavigationIdentifier = .advanced
                     appState.appDelegate?.openSettingsWindow()
                 } label: {
-                    Text("Open Ice Settings")
+                    Text("Open Barextender Settings")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.link)
             }
             .padding(.horizontal, 10)
         } else if menuBarManager.isMenuBarHiddenBySystemUserDefaults {
-            Text("Ice cannot display menu bar items for automatically hidden menu bars")
+            Text("Barextender cannot display menu bar items for automatically hidden menu bars")
                 .padding(.horizontal, 10)
         } else if imageCache.cacheFailed(for: section) {
             Text("Unable to display menu bar items")
+                .padding(.horizontal, 10)
+        } else if items.isEmpty {
+            Text("There are no menu bar items in this section.")
                 .padding(.horizontal, 10)
         } else {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
                     ForEach(items, id: \.windowID) { item in
-                        IceBarItemView(item: item, closePanel: closePanel)
+                        IceBarItemView(item: item, screen: screen, closePanel: closePanel)
                     }
                 }
             }
-            .environment(\.isScrollEnabled, frame.width == imageCache.screen?.frame.width)
+            .environment(\.isScrollEnabled, frame.width >= screen.frame.width)
             .defaultScrollAnchor(.trailing)
             .scrollIndicatorsFlash(trigger: scrollIndicatorsFlashTrigger)
             .task {
@@ -354,6 +376,7 @@ private struct IceBarItemView: View {
     @EnvironmentObject var itemManager: MenuBarItemManager
 
     let item: MenuBarItem
+    let screen: NSScreen
     let closePanel: () -> Void
 
     private var leftClickAction: () -> Void {
@@ -364,7 +387,7 @@ private struct IceBarItemView: View {
             closePanel()
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .left)
+                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .left, on: screen)
             }
         }
     }
@@ -377,7 +400,7 @@ private struct IceBarItemView: View {
             closePanel()
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .right)
+                itemManager.tempShowItem(item, clickWhenFinished: true, mouseButton: .right, on: screen)
             }
         }
     }

@@ -60,57 +60,11 @@ extension MigrationManager {
             return
         }
         try MigrationManager.performAll(blocks: [
-            migrateHotkeys0_8_0,
             migrateControlItems0_8_0,
             migrateSections0_8_0,
         ])
         Defaults.set(true, forKey: .hasMigrated0_8_0)
         Logger.migration.info("Successfully migrated to 0.8.0 settings")
-    }
-
-    // MARK: Migrate Hotkeys
-
-    /// Migrates the user's saved hotkeys from the old method of storing
-    /// them in their corresponding menu bar sections to the new method
-    /// of storing them as stand-alone data in the `0.8.0` release.
-    private func migrateHotkeys0_8_0() throws {
-        let sectionsArray: [[String: Any]]
-        do {
-            guard let array = try getMenuBarSectionArray() else {
-                return
-            }
-            sectionsArray = array
-        } catch {
-            throw MigrationError.hotkeyMigrationError(error)
-        }
-
-        // get the hotkey data from the hidden and always-hidden sections,
-        // if available, and create equivalent key combinations to assign
-        // to the corresponding hotkeys
-        for name: MenuBarSection.Name in [.hidden, .alwaysHidden] {
-            guard
-                let sectionDict = sectionsArray.first(where: { $0["name"] as? String == name.deprecatedRawValue }),
-                let hotkeyDict = sectionDict["hotkey"] as? [String: Int],
-                let key = hotkeyDict["key"],
-                let modifiers = hotkeyDict["modifiers"]
-            else {
-                continue
-            }
-            let keyCombination = KeyCombination(
-                key: KeyCode(rawValue: key),
-                modifiers: Modifiers(rawValue: modifiers)
-            )
-            let hotkeySettingsManager = appState.settingsManager.hotkeySettingsManager
-            if case .hidden = name {
-                if let hotkey = hotkeySettingsManager.hotkey(withAction: .toggleHiddenSection) {
-                    hotkey.keyCombination = keyCombination
-                }
-            } else if case .alwaysHidden = name {
-                if let hotkey = hotkeySettingsManager.hotkey(withAction: .toggleAlwaysHiddenSection) {
-                    hotkey.keyCombination = keyCombination
-                }
-            }
-        }
     }
 
     // MARK: Migrate Control Items
@@ -242,8 +196,10 @@ extension MigrationManager {
             }
 
             let alert = NSAlert()
-            alert.messageText = "Due to a bug in the 0.10.0 release, the data for Ice's menu bar items was corrupted and their positions had to be reset."
-            alert.informativeText = "Our sincerest apologies for the inconvenience."
+            alert.messageText = BarextenderLocalization.string(
+                "Barextender updated its menu bar item storage. Arrange your items again in Settings > Menu Bar Items."
+            )
+            alert.informativeText = BarextenderLocalization.string("Our sincerest apologies for the inconvenience.")
 
             return .successButShowAlert(alert)
         }
@@ -352,7 +308,6 @@ extension MigrationManager {
 extension MigrationManager {
     enum MigrationError: Error, CustomStringConvertible {
         case invalidMenuBarSectionsJSONObject(Any)
-        case hotkeyMigrationError(any Error)
         case controlItemMigrationError(any Error)
         case appearanceConfigurationMigrationError(AppearanceConfigurationMigrationError)
         case combinedError([any Error])
@@ -361,8 +316,6 @@ extension MigrationManager {
             switch self {
             case .invalidMenuBarSectionsJSONObject(let object):
                 "Invalid menu bar sections JSON object: \(object)"
-            case .hotkeyMigrationError(let error):
-                "Error migrating hotkeys: \(error)"
             case .controlItemMigrationError(let error):
                 "Error migrating control items: \(error)"
             case .appearanceConfigurationMigrationError(let error):

@@ -1,43 +1,21 @@
 //
 //  AboutSettingsPane.swift
-//  Ice
+//  Barextender
 //
 
 import SwiftUI
 
 struct AboutSettingsPane: View {
-    @EnvironmentObject var appState: AppState
     @Environment(\.openURL) private var openURL
-
-    private var updatesManager: UpdatesManager {
-        appState.updatesManager
-    }
 
     private var acknowledgementsURL: URL {
         // swiftlint:disable:next force_unwrapping
         Bundle.main.url(forResource: "Acknowledgements", withExtension: "pdf")!
     }
 
-    private var contributeURL: URL {
+    private var upstreamURL: URL {
         // swiftlint:disable:next force_unwrapping
         URL(string: "https://github.com/jordanbaird/Ice")!
-    }
-
-    private var issuesURL: URL {
-        contributeURL.appendingPathComponent("issues")
-    }
-
-    private var donateURL: URL {
-        // swiftlint:disable:next force_unwrapping
-        URL(string: "https://icemenubar.app/Donate")!
-    }
-
-    private var lastUpdateCheckString: String {
-        if let date = updatesManager.lastUpdateCheckDate {
-            date.formatted(date: .abbreviated, time: .standard)
-        } else {
-            "Never"
-        }
     }
 
     var body: some View {
@@ -52,11 +30,14 @@ struct AboutSettingsPane: View {
     @ViewBuilder
     private var mainForm: some View {
         IceForm(padding: EdgeInsets(top: 5, leading: 30, bottom: 30, trailing: 30), spacing: 0) {
-            appIconAndCopyrightSection
+            appIdentitySection
                 .layoutPriority(1)
 
             Spacer(minLength: 0)
                 .frame(maxHeight: 20)
+
+            licensingSection
+                .layoutPriority(1)
 
             updatesSection
                 .layoutPriority(1)
@@ -67,27 +48,27 @@ struct AboutSettingsPane: View {
     }
 
     @ViewBuilder
-    private var appIconAndCopyrightSection: some View {
+    private var appIdentitySection: some View {
         IceSection(options: .plain) {
-            HStack(spacing: 10) {
+            HStack(spacing: 18) {
                 if let nsImage = NSImage(named: NSImage.applicationIconName) {
                     Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 225)
+                        .frame(width: 132)
                 }
 
-                VStack(alignment: .leading) {
-                    Text("Ice")
-                        .font(.system(size: 72, weight: .medium))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Barextender")
+                        .font(.system(size: 44, weight: .semibold))
                         .foregroundStyle(.primary)
 
                     Text("Version \(Constants.versionString)")
-                        .font(.system(size: 18))
+                        .font(.system(size: 16))
                         .foregroundStyle(.secondary)
 
                     Text(Constants.copyrightString)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -95,63 +76,38 @@ struct AboutSettingsPane: View {
     }
 
     @ViewBuilder
-    private var updatesSection: some View {
-        IceSection(options: .hasDividers) {
-            automaticallyCheckForUpdates
-            automaticallyDownloadUpdates
-            if updatesManager.canCheckForUpdates {
-                checkForUpdates
+    private var licensingSection: some View {
+        IceSection("Open-Source Credits") {
+            Text("Barextender is based on Ice by Jordan Baird and is distributed under GPL-3.0.")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("View Ice source project") {
+                openURL(upstreamURL)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: 600)
     }
 
     @ViewBuilder
-    private var automaticallyCheckForUpdates: some View {
-        Toggle(
-            "Automatically check for updates",
-            isOn: updatesManager.bindings.automaticallyChecksForUpdates
-        )
-    }
-
-    @ViewBuilder
-    private var automaticallyDownloadUpdates: some View {
-        Toggle(
-            "Automatically download updates",
-            isOn: updatesManager.bindings.automaticallyDownloadsUpdates
-        )
-    }
-
-    @ViewBuilder
-    private var checkForUpdates: some View {
-        HStack {
-            Button("Check for Updates") {
-                updatesManager.checkForUpdates()
-            }
-            Spacer()
-            Text("Last checked: \(lastUpdateCheckString)")
+    private var updatesSection: some View {
+        IceSection("Software Updates") {
+            Label("Updates are not configured for this local build", systemImage: "info.circle")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("A Barextender release feed must be configured before automatic updates can be enabled.")
                 .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     @ViewBuilder
     private var bottomBar: some View {
         HStack {
-            Button("Quit Ice") {
+            Button("Quit Barextender") {
                 NSApp.terminate(nil)
             }
             Spacer()
             Button("Acknowledgements") {
                 NSWorkspace.shared.open(acknowledgementsURL)
-            }
-            Button("Contribute") {
-                openURL(contributeURL)
-            }
-            Button("Report a Bug") {
-                openURL(issuesURL)
-            }
-            Button("Support Ice", systemImage: "heart.circle.fill") {
-                openURL(donateURL)
             }
         }
         .padding(8)

@@ -271,7 +271,7 @@ extension EventManager {
         guard
             let appState,
             appState.settingsManager.generalSettingsManager.showOnHover,
-            !appState.settingsManager.generalSettingsManager.useIceBar,
+            !appState.settingsManager.generalSettingsManager.shouldUseIceBar(on: bestScreen),
             isMouseInsideMenuBar
         else {
             return
@@ -515,6 +515,7 @@ extension EventManager {
     var isMouseInsideEmptyMenuBarSpace: Bool {
         isMouseInsideMenuBar &&
         !isMouseInsideApplicationMenu &&
+        !isMouseInsideIceIcon &&
         !isMouseInsideMenuBarItem &&
         !isMouseInsideNotch
     }
@@ -529,6 +530,9 @@ extension EventManager {
             return false
         }
         let panel = appState.menuBarManager.iceBarPanel
+        guard panel.isVisible else {
+            return false
+        }
         // Pad the frame to be more forgiving if the user accidentally
         // moves their mouse outside of the Ice Bar.
         let paddedFrame = panel.frame.insetBy(dx: -10, dy: -10)

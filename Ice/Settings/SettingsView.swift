@@ -6,35 +6,12 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @EnvironmentObject var appState: AppState
     @EnvironmentObject var navigationState: AppNavigationState
-    @Environment(\.sidebarRowSize) var sidebarRowSize
 
-    private var sidebarWidth: CGFloat {
-        switch sidebarRowSize {
-        case .small: 190
-        case .medium: 210
-        case .large: 230
-        @unknown default: 210
-        }
-    }
-
-    private var sidebarItemHeight: CGFloat {
-        switch sidebarRowSize {
-        case .small: 26
-        case .medium: 32
-        case .large: 34
-        @unknown default: 32
-        }
-    }
-
-    private var sidebarItemFontSize: CGFloat {
-        switch sidebarRowSize {
-        case .small: 13
-        case .medium: 15
-        case .large: 16
-        @unknown default: 15
-        }
-    }
+    private let sidebarWidth: CGFloat = 240
+    private let sidebarItemHeight: CGFloat = 31
+    private let sidebarItemFontSize: CGFloat = 13
 
     var body: some View {
         NavigationSplitView {
@@ -42,7 +19,7 @@ struct SettingsView: View {
         } detail: {
             detailView
         }
-        .navigationTitle(navigationState.settingsNavigationIdentifier.localized)
+        .navigationTitle(BarextenderLocalization.string(navigationState.settingsNavigationIdentifier.rawValue))
     }
 
     @ViewBuilder
@@ -53,33 +30,49 @@ struct SettingsView: View {
                     sidebarItem(for: identifier)
                 }
             } header: {
-                Text("Ice")
-                    .font(.system(size: 36, weight: .medium))
+                Text("Barextender")
+                    .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(.primary)
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .collapsible(false)
         }
         .scrollDisabled(true)
         .removeSidebarToggle()
-        .navigationSplitViewColumnWidth(sidebarWidth)
+        .navigationSplitViewColumnWidth(min: sidebarWidth, ideal: sidebarWidth, max: sidebarWidth)
     }
 
     @ViewBuilder
     private var detailView: some View {
-        switch navigationState.settingsNavigationIdentifier {
-        case .general:
-            GeneralSettingsPane()
-        case .menuBarLayout:
-            MenuBarLayoutSettingsPane()
-        case .menuBarAppearance:
-            MenuBarAppearanceSettingsPane()
-        case .hotkeys:
-            HotkeysSettingsPane()
-        case .advanced:
-            AdvancedSettingsPane()
-        case .about:
-            AboutSettingsPane()
+        Group {
+            switch navigationState.settingsNavigationIdentifier {
+            case .general:
+                GeneralSettingsPane()
+            case .menuBarLayout:
+                MenuBarLayoutSettingsPane()
+            case .menuBarAppearance:
+                MenuBarAppearanceSettingsPane()
+            case .advanced:
+                AdvancedSettingsPane()
+            case .about:
+                AboutSettingsPane()
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if appState.isLimitedMode {
+                Label {
+                    Text("Limited mode: grant Accessibility to discover and arrange menu bar items.")
+                        .font(.callout)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 9)
+                .background(.quaternary)
+            }
         }
     }
 
@@ -100,9 +93,8 @@ struct SettingsView: View {
         case .general: .systemSymbol("gearshape")
         case .menuBarLayout: .systemSymbol("rectangle.topthird.inset.filled")
         case .menuBarAppearance: .systemSymbol("swatchpalette")
-        case .hotkeys: .systemSymbol("keyboard")
         case .advanced: .systemSymbol("gearshape.2")
-        case .about: .assetCatalog(.iceCubeStroke)
+        case .about: .systemSymbol("info.circle")
         }
     }
 }

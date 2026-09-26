@@ -59,7 +59,7 @@ final class LayoutBarScrollView: NSScrollView {
             // constrain the padding view's trailing anchor to the content view's trailing
             // anchor; this, in combination with the above width constraint, aligns the
             // items in the layout bar to the trailing edge
-            paddingView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            paddingView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
         ])
     }
 

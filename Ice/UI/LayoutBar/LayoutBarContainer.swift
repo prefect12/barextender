@@ -94,7 +94,16 @@ final class LayoutBarContainer: NSView {
                     guard let self else {
                         return
                     }
-                    setArrangedViews(items: cache.managedItems(for: section.name))
+                    setArrangedViews(items: appState.newItemManager.layoutItems(cache.managedItems(for: section.name), in: section.name))
+                }
+                .store(in: &c)
+
+            appState.newItemManager.$placement
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    let items = appState.itemManager.itemCache.managedItems(for: section.name)
+                    setArrangedViews(items: appState.newItemManager.layoutItems(items, in: section.name))
                 }
                 .store(in: &c)
 

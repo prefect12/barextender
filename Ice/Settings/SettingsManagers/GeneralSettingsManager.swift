@@ -4,7 +4,7 @@
 //
 
 import Combine
-import Foundation
+import Cocoa
 
 @MainActor
 final class GeneralSettingsManager: ObservableObject {
@@ -25,7 +25,20 @@ final class GeneralSettingsManager: ObservableObject {
 
     /// A Boolean value that indicates whether to show hidden items
     /// in a separate bar below the menu bar.
-    @Published var useIceBar = false
+    @Published var useIceBar = true
+
+    @Published var useIceBarOnlyOnNotchedScreens = false
+
+    @Published var showAllOnWideScreen = false
+    @Published var showAllScreenWidthThreshold: Double = 3_000
+
+    func shouldUseIceBar(on screen: NSScreen?) -> Bool {
+        MenuBarToolbarPolicy.shouldUseToolbar(
+            enabled: useIceBar,
+            onlyOnNotchedScreens: useIceBarOnlyOnNotchedScreens,
+            screenHasNotch: screen?.hasNotch ?? false
+        )
+    }
 
     /// The location where the Ice Bar appears.
     @Published var iceBarLocation: IceBarLocation = .dynamic
@@ -84,12 +97,16 @@ final class GeneralSettingsManager: ObservableObject {
         Defaults.ifPresent(key: .showIceIcon, assign: &showIceIcon)
         Defaults.ifPresent(key: .customIceIconIsTemplate, assign: &customIceIconIsTemplate)
         Defaults.ifPresent(key: .useIceBar, assign: &useIceBar)
+        Defaults.ifPresent(key: .useIceBarOnlyOnNotchedScreens, assign: &useIceBarOnlyOnNotchedScreens)
         Defaults.ifPresent(key: .showOnClick, assign: &showOnClick)
         Defaults.ifPresent(key: .showOnHover, assign: &showOnHover)
         Defaults.ifPresent(key: .showOnScroll, assign: &showOnScroll)
         Defaults.ifPresent(key: .itemSpacingOffset, assign: &itemSpacingOffset)
         Defaults.ifPresent(key: .autoRehide, assign: &autoRehide)
         Defaults.ifPresent(key: .rehideInterval, assign: &rehideInterval)
+        Defaults.ifPresent(key: .showAllOnWideScreen, assign: &showAllOnWideScreen)
+        Defaults.ifPresent(key: .showAllScreenWidthThreshold, assign: &showAllScreenWidthThreshold)
+        showAllScreenWidthThreshold = MenuBarScreenRule.threshold(showAllScreenWidthThreshold)
 
         Defaults.ifPresent(key: .iceBarLocation) { rawValue in
             if let location = IceBarLocation(rawValue: rawValue) {
@@ -163,11 +180,31 @@ final class GeneralSettingsManager: ObservableObject {
             }
             .store(in: &c)
 
+        $useIceBarOnlyOnNotchedScreens
+            .receive(on: DispatchQueue.main)
+            .sink { [weak appState] onlyOnNotchedScreens in
+                Defaults.set(onlyOnNotchedScreens, forKey: .useIceBarOnlyOnNotchedScreens)
+                if appState?.menuBarManager.iceBarPanel.isVisible == true {
+                    appState?.menuBarManager.iceBarPanel.close()
+                }
+            }
+            .store(in: &c)
+
         $showOnClick
             .receive(on: DispatchQueue.main)
             .sink { showOnClick in
                 Defaults.set(showOnClick, forKey: .showOnClick)
             }
+            .store(in: &c)
+
+        $showAllOnWideScreen
+            .receive(on: DispatchQueue.main)
+            .sink { Defaults.set($0, forKey: .showAllOnWideScreen) }
+            .store(in: &c)
+
+        $showAllScreenWidthThreshold
+            .receive(on: DispatchQueue.main)
+            .sink { Defaults.set(MenuBarScreenRule.threshold($0), forKey: .showAllScreenWidthThreshold) }
             .store(in: &c)
 
         $showOnHover

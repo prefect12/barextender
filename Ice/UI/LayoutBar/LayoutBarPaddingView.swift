@@ -44,19 +44,22 @@ final class LayoutBarPaddingView: NSView {
         addSubview(self.container)
 
         self.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
+        var constraints = [
             // center the container along the y axis
             container.centerYAnchor.constraint(equalTo: centerYAnchor),
-
-            // give the container a few points of trailing space
-            trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: 7.5),
-
-            // allow variable spacing between leading anchors to let the view stretch
-            // to fit whatever size is required; container should remain aligned toward
-            // the trailing edge; this view is itself nested in a scroll view, so if it
-            // has to expand to a larger size, it can be clipped
-            leadingAnchor.constraint(lessThanOrEqualTo: container.leadingAnchor, constant: -7.5),
-        ])
+        ]
+        if section.name == .visible {
+            constraints += [
+                trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: 7.5),
+                leadingAnchor.constraint(lessThanOrEqualTo: container.leadingAnchor, constant: -7.5),
+            ]
+        } else {
+            constraints += [
+                leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: -7.5),
+                trailingAnchor.constraint(greaterThanOrEqualTo: container.trailingAnchor, constant: 7.5),
+            ]
+        }
+        NSLayoutConstraint.activate(constraints)
 
         registerForDraggedTypes([.layoutBarItem])
     }
@@ -96,7 +99,21 @@ final class LayoutBarPaddingView: NSView {
         }
 
         if let index = arrangedViews.firstIndex(of: draggingSource) {
-            if arrangedViews.count == 1 {
+            let nextItem = arrangedViews.dropFirst(index + 1).first { !$0.item.info.isSpecial }?.item
+            let previousItem = arrangedViews.prefix(index).last { !$0.item.info.isSpecial }?.item
+            if let markerIndex = arrangedViews.firstIndex(where: { $0.item.info == .newItems }) {
+                let afterMarker = arrangedViews.dropFirst(markerIndex + 1).first { !$0.item.info.isSpecial }?.item
+                container.appState?.newItemManager.setPlacement(in: section.name, before: afterMarker)
+            }
+            if draggingSource.item.info == .newItems {
+                // The marker updates a rule; no physical menu bar item is dragged.
+                return true
+            }
+            if let nextItem {
+                move(item: draggingSource.item, to: .leftOfItem(nextItem))
+            } else if let previousItem {
+                move(item: draggingSource.item, to: .rightOfItem(previousItem))
+            } else {
                 // dragging source is the only view in the layout bar, so we
                 // need to find a target item
                 let items = MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true)
@@ -110,14 +127,6 @@ final class LayoutBarPaddingView: NSView {
                 } else {
                     Logger.layoutBar.error("No target item for layout bar drag")
                 }
-            } else if arrangedViews.indices.contains(index + 1) {
-                // we have a view to the right of the dragging source
-                let targetItem = arrangedViews[index + 1].item
-                move(item: draggingSource.item, to: .leftOfItem(targetItem))
-            } else if arrangedViews.indices.contains(index - 1) {
-                // we have a view to the left of the dragging source
-                let targetItem = arrangedViews[index - 1].item
-                move(item: draggingSource.item, to: .rightOfItem(targetItem))
             }
         }
 
@@ -132,7 +141,9 @@ final class LayoutBarPaddingView: NSView {
             try await Task.sleep(for: .milliseconds(25))
             do {
                 try await appState.itemManager.slowMove(item: item, to: destination)
+                appState.newItemManager.acknowledgeManualPlacement(of: item)
                 appState.itemManager.removeTempShownItemFromCache(with: item.info)
+                await appState.itemManager.refreshItems()
             } catch {
                 Logger.layoutBar.error("Error moving menu bar item: \(error)")
                 let alert = NSAlert(error: error)

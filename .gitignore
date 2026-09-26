@@ -1,3 +1,6 @@
 .DS_Store
 build/
 xcuserdata/
+work/
+DerivedData/
+*.xcuserstate

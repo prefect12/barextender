@@ -182,37 +182,6 @@ final class ControlItem {
             }
             .store(in: &c)
 
-        statusItem.publisher(for: \.isVisible)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] isVisible in
-                guard
-                    let self,
-                    let appState,
-                    let section
-                else {
-                    return
-                }
-
-                let manager = appState.settingsManager.hotkeySettingsManager
-
-                let hotkey: Hotkey? = switch section.name {
-                case .visible: nil
-                case .hidden: manager.hotkey(withAction: .toggleHiddenSection)
-                case .alwaysHidden: manager.hotkey(withAction: .toggleAlwaysHiddenSection)
-                }
-
-                guard let hotkey else {
-                    return
-                }
-
-                if isVisible {
-                    hotkey.enable()
-                } else {
-                    hotkey.disable()
-                }
-            }
-            .store(in: &c)
-
         window?.publisher(for: \.frame)
             .sink { [weak self] frame in
                 guard
@@ -327,6 +296,15 @@ final class ControlItem {
         }
         button.target = self
         button.action = #selector(performAction)
+        button.setAccessibilityIdentifier("BarextenderStatusItem-\(identifier.rawValue)")
+        let accessibilityLabel: String = switch identifier {
+        case .iceIcon: "Barextender"
+        case .hidden: BarextenderLocalization.string("Hidden section divider")
+        case .alwaysHidden: BarextenderLocalization.string("Always-hidden section divider")
+        }
+        button.setAccessibilityLabel(accessibilityLabel)
+        button.setAccessibilityHelp(BarextenderLocalization.string("Click to show or hide menu bar items. Right-click for settings."))
+        button.toolTip = BarextenderLocalization.string("Click to show or hide menu bar items. Right-click for settings.")
     }
 
     /// Updates the appearance of the status item using the given hiding state.
@@ -388,44 +366,44 @@ final class ControlItem {
 
     /// Performs the control item's action.
     @objc private func performAction() {
-        guard
-            let appState,
-            let event = NSApp.currentEvent
-        else {
+        guard let appState else {
             return
         }
-        switch event.type {
-        case .leftMouseDown, .leftMouseUp:
-            if NSEvent.modifierFlags == .control {
-                statusItem.showMenu(createMenu(with: appState))
-            } else if
-                NSEvent.modifierFlags == .option,
-                appState.settingsManager.advancedSettingsManager.canToggleAlwaysHiddenSection
-            {
-                if let alwaysHiddenSection = appState.menuBarManager.section(withName: .alwaysHidden) {
-                    alwaysHiddenSection.toggle()
-                }
-            } else {
-                section?.toggle()
+        let event = NSApp.currentEvent
+        // AXPress and keyboard activation may have no current mouse event.
+        // They must perform the same primary action as an ordinary click.
+        if let event {
+            switch event.type {
+            case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .keyDown, .keyUp:
+                break
+            default:
+                return
             }
-        case .rightMouseUp:
+        }
+        let modifiers = event?.modifierFlags ?? []
+        let action = MenuBarActivation.resolve(
+            rightClick: event?.type == .rightMouseDown || event?.type == .rightMouseUp,
+            controlModifier: modifiers.contains(.control),
+            optionModifier: modifiers.contains(.option),
+            canToggleAlwaysHidden: appState.settingsManager.advancedSettingsManager.canToggleAlwaysHiddenSection
+        )
+        Logger.controlItem.info("Activation \(identifier.rawValue): \(String(describing: action)); toolbar=\(appState.settingsManager.generalSettingsManager.useIceBar)")
+        switch action {
+        case .contextMenu:
             statusItem.showMenu(createMenu(with: appState))
-        default:
-            break
+        case .toggleAlwaysHidden:
+            appState.menuBarManager.section(withName: .alwaysHidden)?.toggle()
+        case .toggleSection:
+            section?.toggle()
         }
     }
 
     /// Creates a menu to show under the control item.
     private func createMenu(with appState: AppState) -> NSMenu {
-        func hotkey(withAction action: HotkeyAction) -> Hotkey? {
-            let hotkeySettingsManager = appState.settingsManager.hotkeySettingsManager
-            return hotkeySettingsManager.hotkey(withAction: action)
-        }
-
-        let menu = NSMenu(title: "Ice")
+        let menu = NSMenu(title: BarextenderLocalization.string("Barextender"))
 
         let settingsItem = NSMenuItem(
-            title: "Ice Settings…",
+            title: BarextenderLocalization.string("Barextender Settings…"),
             action: #selector(AppDelegate.openSettingsWindow),
             keyEquivalent: ","
         )
@@ -435,18 +413,11 @@ final class ControlItem {
         menu.addItem(.separator())
 
         let searchItem = NSMenuItem(
-            title: "Search Menu Bar Items",
+            title: BarextenderLocalization.string("Search Menu Bar Items"),
             action: #selector(showSearchPanel),
             keyEquivalent: ""
         )
         searchItem.target = self
-        if
-            let hotkey = hotkey(withAction: .searchMenuBarItems),
-            let keyCombination = hotkey.keyCombination
-        {
-            searchItem.keyEquivalent = keyCombination.key.keyEquivalent
-            searchItem.keyEquivalentModifierMask = keyCombination.modifiers.nsEventFlags
-        }
         menu.addItem(searchItem)
 
         menu.addItem(.separator())
@@ -462,49 +433,34 @@ final class ControlItem {
                 continue
             }
             let item = NSMenuItem(
-                title: "\(section.isHidden ? "Show" : "Hide") the \(name.displayString) Section",
+                title: BarextenderLocalization.format(
+                    section.isHidden ? "Show the %@ Section" : "Hide the %@ Section",
+                    name.displayString
+                ),
                 action: #selector(toggleMenuBarSection),
                 keyEquivalent: ""
             )
             item.target = self
             Self.sectionStorage.weakSet(section, for: item)
-            switch name {
-            case .visible:
-                break
-            case .hidden:
-                if
-                    let hotkey = hotkey(withAction: .toggleHiddenSection),
-                    let keyCombination = hotkey.keyCombination
-                {
-                    item.keyEquivalent = keyCombination.key.keyEquivalent
-                    item.keyEquivalentModifierMask = keyCombination.modifiers.nsEventFlags
-                }
-            case .alwaysHidden:
-                if
-                    let hotkey = hotkey(withAction: .toggleAlwaysHiddenSection),
-                    let keyCombination = hotkey.keyCombination
-                {
-                    item.keyEquivalent = keyCombination.key.keyEquivalent
-                    item.keyEquivalentModifierMask = keyCombination.modifiers.nsEventFlags
-                }
-            }
             menu.addItem(item)
         }
 
         menu.addItem(.separator())
 
-        let checkForUpdatesItem = NSMenuItem(
-            title: "Check for Updates…",
-            action: #selector(checkForUpdates),
-            keyEquivalent: ""
-        )
-        checkForUpdatesItem.target = self
-        menu.addItem(checkForUpdatesItem)
+        if appState.updatesManager.canCheckForUpdates {
+            let checkForUpdatesItem = NSMenuItem(
+                title: BarextenderLocalization.string("Check for Updates…"),
+                action: #selector(checkForUpdates),
+                keyEquivalent: ""
+            )
+            checkForUpdatesItem.target = self
+            menu.addItem(checkForUpdatesItem)
+        }
 
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit Ice",
+            title: BarextenderLocalization.string("Quit Barextender"),
             action: #selector(NSApp.terminate),
             keyEquivalent: "q"
         )
@@ -546,6 +502,7 @@ final class ControlItem {
             return
         }
         statusItem.isVisible = true
+        updateStatusItem(with: state)
     }
 
     /// Removes the control item from the menu bar.
@@ -559,6 +516,15 @@ final class ControlItem {
         let cached = StatusItemDefaults[.preferredPosition, autosaveName]
         statusItem.isVisible = false
         StatusItemDefaults[.preferredPosition, autosaveName] = cached
+    }
+
+    /// Re-registers only this app's status item at a recoverable position.
+    func restorePreferredPosition(_ position: CGFloat) {
+        let autosaveName = statusItem.autosaveName as String
+        statusItem.isVisible = false
+        StatusItemDefaults[.preferredPosition, autosaveName] = position
+        statusItem.isVisible = true
+        configureStatusItem()
     }
 }
 

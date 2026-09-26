@@ -18,9 +18,14 @@ final class UpdatesManager: NSObject, ObservableObject {
     /// The shared app state.
     private(set) weak var appState: AppState?
 
+    /// Whether an update feed has been configured for this build.
+    private var hasUpdateFeed: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String != nil
+    }
+
     /// The underlying updater controller.
     private(set) lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
+        startingUpdater: hasUpdateFeed,
         updaterDelegate: self,
         userDriverDelegate: self
     )
@@ -77,7 +82,7 @@ final class UpdatesManager: NSObject, ObservableObject {
         #if DEBUG
         // Checking for updates hangs in debug mode.
         let alert = NSAlert()
-        alert.messageText = "Checking for updates is not supported in debug mode."
+        alert.messageText = BarextenderLocalization.string("Checking for updates is not supported in debug mode.")
         alert.runModal()
         #else
         guard let appState else {
@@ -127,8 +132,8 @@ extension UpdatesManager: @preconcurrency SPUStandardUserDriverDelegate {
         if !state.userInitiated {
             appState.userNotificationManager.addRequest(
                 with: .updateCheck,
-                title: "A new update is available",
-                body: "Version \(update.displayVersionString) is now available"
+                title: BarextenderLocalization.string("A new update is available"),
+                body: BarextenderLocalization.format("Version %@ is now available", update.displayVersionString)
             )
         }
     }

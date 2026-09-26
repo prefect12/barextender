@@ -43,7 +43,7 @@ final class MenuBarItemManager: ObservableObject {
 
                 if item.owningApplication == .current {
                     // Ice icon is the only item owned by Ice that should be included.
-                    guard item.title == ControlItem.Identifier.iceIcon.rawValue else {
+                    guard item.title == ControlItem.Identifier.iceIcon.rawValue || item.info.title.hasPrefix("BX-") else {
                         return false
                     }
                 }
@@ -308,6 +308,12 @@ extension MenuBarItemManager {
         }
 
         itemCache = cache
+    }
+
+    /// Invalidates geometry after a settings drag or an automatic insertion.
+    func refreshItems() async {
+        cachedItemWindowIDs.removeAll()
+        await cacheItemsIfNeeded()
     }
 
     /// Caches the current menu bar items if needed, ensuring that the control
@@ -1142,6 +1148,9 @@ extension MenuBarItemManager {
     ///   - destination: A destination to move the menu bar item.
     ///   - timeout: Amount of time to wait before throwing an error.
     func slowMove(item: MenuBarItem, to destination: MoveDestination, timeout: Duration = .seconds(1)) async throws {
+        guard !item.info.isSpecial else {
+            throw EventError(code: .invalidItem, item: item)
+        }
         itemMoveCount += 1
         defer {
             itemMoveCount -= 1
@@ -1297,18 +1306,34 @@ extension MenuBarItemManager {
     ///   - clickWhenFinished: A Boolean value that indicates whether the item should be
     ///     clicked once movement is finished.
     ///   - mouseButton: The mouse button of the click.
-    func tempShowItem(_ item: MenuBarItem, clickWhenFinished: Bool, mouseButton: CGMouseButton) {
+    func tempShowItem(_ item: MenuBarItem, clickWhenFinished: Bool, mouseButton: CGMouseButton, on screen: NSScreen? = nil) {
+        Task {
+            await tempShowItemAndWait(item, clickWhenFinished: clickWhenFinished, mouseButton: mouseButton, on: screen)
+        }
+    }
+
+    /// Temporarily shows multiple items in order, waiting for each move before continuing.
+    func tempShowItems(_ items: [MenuBarItem], clickWhenFinished: Bool, mouseButton: CGMouseButton) async {
+        for item in items {
+            await tempShowItemAndWait(item, clickWhenFinished: clickWhenFinished, mouseButton: mouseButton, on: nil)
+        }
+    }
+
+    private func tempShowItemAndWait(
+        _ item: MenuBarItem,
+        clickWhenFinished: Bool,
+        mouseButton: CGMouseButton,
+        on requestedScreen: NSScreen?
+    ) async {
         if
             let latest = MenuBarItem(windowID: item.windowID),
             latest.isOnScreen
         {
             if clickWhenFinished {
-                Task {
-                    do {
-                        try await click(item: latest, with: mouseButton)
-                    } catch {
-                        Logger.itemManager.error("ERROR: \(error)")
-                    }
+                do {
+                    try await click(item: latest, with: mouseButton)
+                } catch {
+                    Logger.itemManager.error("ERROR: \(error)")
                 }
             }
             return
@@ -1316,7 +1341,7 @@ extension MenuBarItemManager {
 
         guard
             let appState,
-            let screen = NSScreen.main,
+            let screen = requestedScreen ?? NSScreen.screenWithMouse ?? ActiveMenuBarDisplay.screen,
             let applicationMenuFrame = appState.menuBarManager.getApplicationMenuFrame(for: screen.displayID)
         else {
             Logger.itemManager.warning("No application menu frame, so not showing \(item.logString)")
@@ -1333,9 +1358,11 @@ extension MenuBarItemManager {
         }
 
         // Remove all items up to the hidden control item.
-        items.trimPrefix { $0.info != .hiddenControlItem }
-        // Remove the hidden control item.
-        items.removeFirst()
+        guard let hiddenIndex = items.firstIndex(where: { $0.info == .hiddenControlItem }) else {
+            Logger.itemManager.error("Hidden control item unavailable; cannot temporarily show item")
+            return
+        }
+        items.removeFirst(hiddenIndex + 1)
         // Remove all offscreen items.
         items.trimPrefix { !$0.isOnScreen }
 
@@ -1350,48 +1377,43 @@ extension MenuBarItemManager {
 
         guard let targetItem = items.first else {
             let alert = NSAlert()
-            alert.messageText = "Not enough room to show \"\(item.displayName)\""
+            alert.messageText = BarextenderLocalization.format("Not enough room to show %@", item.displayName)
             alert.runModal()
             return
         }
 
         let initialWindows = WindowInfo.getOnScreenWindows()
 
-        Task {
+        do {
             if clickWhenFinished {
-                do {
-                    try await slowMove(item: item, to: .leftOfItem(targetItem))
-                    try await click(item: item, with: mouseButton)
-                } catch {
-                    Logger.itemManager.error("ERROR: \(error)")
-                }
+                try await slowMove(item: item, to: .leftOfItem(targetItem))
+                try await click(item: item, with: mouseButton)
             } else {
-                do {
-                    try await move(item: item, to: .leftOfItem(targetItem))
-                } catch {
-                    Logger.itemManager.error("ERROR: \(error)")
-                }
+                try await slowMove(item: item, to: .leftOfItem(targetItem))
             }
-
-            try? await Task.sleep(for: .milliseconds(100))
-
-            let currentWindows = WindowInfo.getOnScreenWindows()
-
-            let shownInterfaceWindow = currentWindows.first { currentWindow in
-                currentWindow.ownerPID == item.ownerPID &&
-                !initialWindows.contains { initialWindow in
-                    currentWindow.windowID == initialWindow.windowID
-                }
-            }
-
-            let context = TempShownItemContext(
-                info: item.info,
-                returnDestination: destination,
-                shownInterfaceWindow: shownInterfaceWindow
-            )
-            tempShownItemContexts.append(context)
-            runTempShownItemTimer(for: appState.settingsManager.advancedSettingsManager.tempShowInterval)
+        } catch {
+            Logger.itemManager.error("ERROR: \(error)")
+            return
         }
+
+        try? await Task.sleep(for: .milliseconds(100))
+
+        let currentWindows = WindowInfo.getOnScreenWindows()
+
+        let shownInterfaceWindow = currentWindows.first { currentWindow in
+            currentWindow.ownerPID == item.ownerPID &&
+            !initialWindows.contains { initialWindow in
+                currentWindow.windowID == initialWindow.windowID
+            }
+        }
+
+        let context = TempShownItemContext(
+            info: item.info,
+            returnDestination: destination,
+            shownInterfaceWindow: shownInterfaceWindow
+        )
+        tempShownItemContexts.append(context)
+        runTempShownItemTimer(for: appState.settingsManager.advancedSettingsManager.tempShowInterval)
     }
 
     /// Rehides all temporarily shown items.

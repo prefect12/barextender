@@ -10,18 +10,18 @@ struct PermissionsView: View {
     @Environment(\.openWindow) private var openWindow
 
     private var continueButtonText: LocalizedStringKey {
-        if case .hasRequiredPermissions = permissionsManager.permissionsState {
-            "Continue in Limited Mode"
-        } else {
+        if case .hasAllPermissions = permissionsManager.permissionsState {
             "Continue"
+        } else {
+            "Continue in Limited Mode"
         }
     }
 
     private var continueButtonForegroundStyle: some ShapeStyle {
-        if case .hasRequiredPermissions = permissionsManager.permissionsState {
-            AnyShapeStyle(.yellow)
-        } else {
+        if case .hasAllPermissions = permissionsManager.permissionsState {
             AnyShapeStyle(.primary)
+        } else {
+            AnyShapeStyle(.yellow)
         }
     }
 
@@ -74,10 +74,13 @@ struct PermissionsView: View {
     private var explanationView: some View {
         IceSection {
             VStack {
-                Text("Ice needs permission to manage the menu bar.")
+                Text("Barextender needs permission to manage the menu bar.")
                 Text("Absolutely no personal information is collected or stored.")
                     .bold()
                     .foregroundStyle(.red)
+                Text("You can configure settings in limited mode before granting Accessibility.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
             .padding()
         }
@@ -119,7 +122,11 @@ struct PermissionsView: View {
             guard let appState = permissionsManager.appState else {
                 return
             }
-            appState.performSetup()
+            if permissionsManager.accessibilityPermission.hasPermission {
+                appState.performSetup()
+            } else {
+                appState.performLimitedSetup()
+            }
             appState.permissionsWindow?.close()
             appState.appDelegate?.openSettingsWindow()
         } label: {
@@ -127,7 +134,6 @@ struct PermissionsView: View {
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(continueButtonForegroundStyle)
         }
-        .disabled(permissionsManager.permissionsState == .missingPermissions)
     }
 
     @ViewBuilder
@@ -139,7 +145,7 @@ struct PermissionsView: View {
                     .underline()
 
                 VStack(spacing: 0) {
-                    Text("Ice needs this to:")
+                    Text("Barextender needs this to:")
                         .font(.title3)
                         .bold()
 
@@ -180,7 +186,7 @@ struct PermissionsView: View {
                             font: .callout.bold()
                         ) {
                             Label {
-                                Text("Ice can work in a limited mode without this permission.")
+                                Text("Barextender can work in a limited mode without this permission.")
                             } icon: {
                                 Image(systemName: "checkmark.shield")
                                     .foregroundStyle(.green)

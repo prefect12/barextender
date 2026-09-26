@@ -22,6 +22,11 @@ final class MenuBarManager: ObservableObject {
     /// according to a value stored in UserDefaults.
     @Published private(set) var isMenuBarHiddenBySystemUserDefaults = false
 
+    @Published private(set) var activeScreenPixelWidth = 0
+    @Published private(set) var activeScreenName = ""
+    @Published private(set) var screenRuleIsShowingAll = false
+    private var statesBeforeScreenRule = [(MenuBarSection.Name, ControlItem.HidingState)]()
+
     /// The shared app state.
     private weak var appState: AppState?
 
@@ -58,6 +63,35 @@ final class MenuBarManager: ObservableObject {
         initializeSections()
         configureCancellables()
         iceBarPanel.performSetup()
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            self?.recoverOffscreenControlItemsIfNeeded()
+            self?.applyScreenRule()
+        }
+    }
+
+    /// Another menu bar manager can leave this app's autosaved controls outside
+    /// the display. Repair our two control positions without moving other apps.
+    private func recoverOffscreenControlItemsIfNeeded() {
+        guard let appState,
+              appState.settingsManager.generalSettingsManager.showIceIcon,
+              !appState.isActiveSpaceFullscreen,
+              !isMenuBarHiddenBySystem,
+              !isMenuBarHiddenBySystemUserDefaults,
+              let visible = section(withName: .visible),
+              let frame = visible.controlItem.window?.frame else { return }
+
+        let menuBarFrames = NSScreen.screens.map { screen in
+            CGRect(x: screen.frame.minX, y: screen.visibleFrame.maxY,
+                   width: screen.frame.width, height: screen.frame.maxY - screen.visibleFrame.maxY)
+        }
+        let notchFrames = NSScreen.screens.compactMap(\.frameOfNotch)
+        guard MenuBarControlPlacement.needsRecovery(iconFrame: frame, menuBarFrames: menuBarFrames, notchFrames: notchFrames) else {
+            return
+        }
+        Logger.menuBarManager.warning("Own status icon was outside the menu bar: \(NSStringFromRect(frame)); restoring app control positions")
+        visible.controlItem.restorePreferredPosition(0)
+        section(withName: .hidden)?.controlItem.restorePreferredPosition(1)
     }
 
     /// Performs the initial setup of the menu bar manager's sections.
@@ -83,6 +117,18 @@ final class MenuBarManager: ObservableObject {
     /// Configures the internal observers for the manager.
     private func configureCancellables() {
         var c = Set<AnyCancellable>()
+
+        Timer.publish(every: 0.5, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.applyScreenRule() }
+            .store(in: &c)
+
+        if let settings = appState?.settingsManager.generalSettingsManager {
+            settings.$showAllOnWideScreen.combineLatest(settings.$showAllScreenWidthThreshold)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.applyScreenRule() }
+                .store(in: &c)
+        }
 
         NSApp.publisher(for: \.currentSystemPresentationOptions)
             .receive(on: DispatchQueue.main)
@@ -223,6 +269,37 @@ final class MenuBarManager: ObservableObject {
         cancellables = c
     }
 
+    /// An automatic override restores the user's previous section visibility
+    /// when disabled, when the threshold is crossed, or when entering full screen.
+    private func applyScreenRule() {
+        guard let appState, let screen = ActiveMenuBarDisplay.screen else { return }
+        let pixelWidth = ActiveMenuBarDisplay.pixelWidth(of: screen)
+        if activeScreenPixelWidth != pixelWidth { activeScreenPixelWidth = pixelWidth }
+        if activeScreenName != screen.localizedName { activeScreenName = screen.localizedName }
+        let settings = appState.settingsManager.generalSettingsManager
+        let shouldShow = !appState.isLimitedMode && !appState.isActiveSpaceFullscreen &&
+            !isMenuBarHiddenBySystem && !isMenuBarHiddenBySystemUserDefaults &&
+            MenuBarScreenRule.shouldShowAll(enabled: settings.showAllOnWideScreen,
+                                           pixelWidth: pixelWidth,
+                                           threshold: settings.showAllScreenWidthThreshold)
+        if shouldShow {
+            if !screenRuleIsShowingAll {
+                statesBeforeScreenRule = sections.map { ($0.name, $0.controlItem.state) }
+                iceBarPanel.close()
+                screenRuleIsShowingAll = true
+            }
+            for section in sections where section.controlItem.state != .showItems {
+                section.controlItem.state = .showItems
+            }
+        } else if screenRuleIsShowingAll {
+            screenRuleIsShowingAll = false
+            for (name, state) in statesBeforeScreenRule {
+                section(withName: name)?.controlItem.state = state
+            }
+            statesBeforeScreenRule.removeAll()
+        }
+    }
+
     /// Updates the ``averageColorInfo`` property with the current average color
     /// of the menu bar.
     func updateAverageColorInfo() {
@@ -327,10 +404,10 @@ final class MenuBarManager: ObservableObject {
 
     /// Shows the right-click menu.
     func showRightClickMenu(at point: CGPoint) {
-        let menu = NSMenu(title: "Ice")
+        let menu = NSMenu(title: BarextenderLocalization.string("Barextender"))
 
         let editItem = NSMenuItem(
-            title: "Edit Menu Bar Appearance…",
+            title: BarextenderLocalization.string("Edit Menu Bar Style…"),
             action: #selector(showAppearanceEditorPopover),
             keyEquivalent: ""
         )
@@ -340,7 +417,7 @@ final class MenuBarManager: ObservableObject {
         menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(
-            title: "Ice Settings…",
+            title: BarextenderLocalization.string("Barextender Settings…"),
             action: #selector(AppDelegate.openSettingsWindow),
             keyEquivalent: ","
         )

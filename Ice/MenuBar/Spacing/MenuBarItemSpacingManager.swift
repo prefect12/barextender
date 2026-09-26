@@ -28,16 +28,16 @@ final class MenuBarItemSpacingManager {
         let failedApps: [String]
 
         var errorDescription: String? {
-            "The following applications failed to quit and were not restarted:\n" + failedApps.joined(separator: "\n")
+            BarextenderLocalization.format("These apps did not quit and were not restarted:\n%@", failedApps.joined(separator: "\n"))
         }
 
         var recoverySuggestion: String? {
-            "You may need to log out for the changes to take effect."
+            BarextenderLocalization.string("You may need to log out for the changes to take effect.")
         }
     }
 
-    /// Delay before force terminating an app.
-    private let forceTerminateDelay = 1
+    /// Allow normal termination, including an app's own unsaved-work prompts.
+    private let terminateTimeout: TimeInterval = 3
 
     /// The offset to apply to the default spacing and padding.
     /// Does not take effect until ``applyOffset()`` is called.
@@ -84,29 +84,11 @@ final class MenuBarItemSpacingManager {
 
         app.terminate()
 
-        var cancellable: AnyCancellable?
-        return try await withCheckedThrowingContinuation { continuation in
-            let timeoutTask = Task {
-                try await Task.sleep(for: .seconds(forceTerminateDelay))
-                if !app.isTerminated {
-                    Logger.spacing.debug("Application \"\(logString(for: app))\" did not terminate within \(forceTerminateDelay) seconds, attempting to force terminate")
-                    app.forceTerminate()
-                }
-            }
-
-            cancellable = app.publisher(for: \.isTerminated).sink { [weak self] isTerminated in
-                guard
-                    let self,
-                    isTerminated
-                else {
-                    return
-                }
-                timeoutTask.cancel()
-                cancellable?.cancel()
-                Logger.spacing.debug("Application \"\(logString(for: app))\" terminated successfully")
-                continuation.resume()
-            }
+        let deadline = Date.now.addingTimeInterval(terminateTimeout)
+        while !app.isTerminated && Date.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
         }
+        guard app.isTerminated else { throw CocoaError(.userCancelled) }
     }
 
     /// Asynchronously launches the app at the given URL.
@@ -166,7 +148,7 @@ final class MenuBarItemSpacingManager {
                     app.bundleIdentifier != "com.apple.controlcenter", // ControlCenter handles its own relaunch, so skip it.
                     app != .current
                 else {
-                    break
+                    continue
                 }
                 group.addTask { @MainActor in
                     do {

@@ -154,6 +154,7 @@ private final class MenuBarSearchHostingView: NSHostingView<AnyView> {
     ) {
         super.init(
             rootView: MenuBarSearchContentView(closePanel: { [weak panel] in panel?.close() })
+                .environment(\.locale, BarextenderLocalization.locale)
                 .environmentObject(appState.itemManager)
                 .environmentObject(appState.imageCache)
                 .erasedToAnyView()

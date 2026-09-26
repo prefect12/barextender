@@ -14,7 +14,7 @@ enum Constants {
     static let buildString = Bundle.main.buildString!
 
     /// The user-readable copyright string in the app's bundle.
-    static let copyrightString = Bundle.main.copyrightString!
+    static let copyrightString = BarextenderLocalization.string("Copyright © 2026 Barextender contributors")
 
     /// The bundle identifier of the app.
     static let bundleIdentifier = Bundle.main.bundleIdentifier!
@@ -27,8 +27,8 @@ enum Constants {
     static let permissionsWindowID = "PermissionsWindow"
 
     /// The title for the settings window.
-    static let settingsWindowTitle = "Ice"
+    static let settingsWindowTitle = "Barextender"
 
     /// The title for the permissions window.
-    static let permissionsWindowTitle = "Permissions"
+    static let permissionsWindowTitle = "权限"
 }

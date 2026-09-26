@@ -9,6 +9,9 @@ import SwiftUI
 /// The model for app-wide state.
 @MainActor
 final class AppState: ObservableObject {
+    /// Whether settings are available but menu bar actions are disabled for missing access.
+    @Published private(set) var isLimitedMode = false
+
     /// A Boolean value that indicates whether the active space is fullscreen.
     @Published private(set) var isActiveSpaceFullscreen = Bridging.isSpaceFullscreen(Bridging.activeSpaceID)
 
@@ -20,6 +23,9 @@ final class AppState: ObservableObject {
 
     /// Manager for menu bar items.
     private(set) lazy var itemManager = MenuBarItemManager(appState: self)
+
+    private(set) lazy var newItemManager = MenuBarNewItemManager(appState: self)
+    private(set) lazy var paletteManager = MenuBarPaletteManager(appState: self)
 
     /// Manager for the state of the menu bar.
     private(set) lazy var menuBarManager = MenuBarManager(appState: self)
@@ -45,9 +51,6 @@ final class AppState: ObservableObject {
     /// Model for app-wide navigation.
     let navigationState = AppNavigationState()
 
-    /// The app's hotkey registry.
-    nonisolated let hotkeyRegistry = HotkeyRegistry()
-
     /// The app's delegate.
     private(set) weak var appDelegate: AppDelegate?
 
@@ -62,6 +65,10 @@ final class AppState: ObservableObject {
 
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
+
+    /// Tracks setup stages so limited mode can later be upgraded safely.
+    private var hasPerformedSettingsSetup = false
+    private var hasPerformedFullSetup = false
 
     /// A Boolean value that indicates whether the app is running as a SwiftUI preview.
     let isPreview: Bool = {
@@ -179,16 +186,44 @@ final class AppState: ObservableObject {
 
     /// Sets up the app state.
     func performSetup() {
+        guard !hasPerformedFullSetup else {
+            return
+        }
+
         configureCancellables()
         permissionsManager.stopAllChecks()
         menuBarManager.performSetup()
         appearanceManager.performSetup()
         eventManager.performSetup()
-        settingsManager.performSetup()
+        performSettingsSetupIfNeeded()
         itemManager.performSetup()
+        newItemManager.performSetup()
+        paletteManager.performSetup()
         imageCache.performSetup()
         updatesManager.performSetup()
         userNotificationManager.performSetup()
+        isLimitedMode = false
+        hasPerformedFullSetup = true
+    }
+
+    /// Loads settings without starting menu bar discovery or interaction.
+    /// This keeps configuration pages available before Accessibility is granted.
+    func performLimitedSetup() {
+        guard !hasPerformedFullSetup else {
+            return
+        }
+
+        configureCancellables()
+        performSettingsSetupIfNeeded()
+        isLimitedMode = true
+    }
+
+    private func performSettingsSetupIfNeeded() {
+        guard !hasPerformedSettingsSetup else {
+            return
+        }
+        settingsManager.performSetup()
+        hasPerformedSettingsSetup = true
     }
 
     /// Assigns the app delegate to the app state.

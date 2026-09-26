@@ -36,7 +36,7 @@ struct MenuBarAppearanceEditor: View {
     private var stackHeader: some View {
         if case .popover(let closePopover) = location {
             ZStack {
-                Text("Menu Bar Appearance")
+                Text("Menu Bar Style")
                     .font(.title2)
                     .frame(maxWidth: .infinity, alignment: .center)
                 Button("Done", action: closePopover)
@@ -107,7 +107,7 @@ struct MenuBarAppearanceEditor: View {
 
     @ViewBuilder
     private var cannotEdit: some View {
-        Text("Ice cannot edit the appearance of automatically hidden menu bars")
+        Text("Barextender cannot edit the appearance of automatically hidden menu bars")
             .font(.title3)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
