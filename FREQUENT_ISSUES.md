@@ -1,35 +1,31 @@
-# Frequent Issues <!-- omit in toc -->
+# 常见问题
 
-- [Items are moved to the always-hidden section](#items-are-moved-to-the-always-hidden-section)
-- [Ice removed an item](#ice-removed-an-item)
-- [Ice does not remember the order of items](#ice-does-not-remember-the-order-of-items)
-- [How do I solve the `Ice cannot arrange menu bar items in automatically hidden menu bars` error?](#how-do-i-solve-the-ice-cannot-arrange-menu-bar-items-in-automatically-hidden-menu-bars-error)
+## 菜单栏图标看不到了
 
-## Items are moved to the always-hidden section
+先检查 Barextender 是否正在运行，以及「通用 → 显示 Barextender 图标」是否开启。设置页中的「显示」「隐藏」「始终隐藏」三个区域可用于查看当前项目归属。
 
-By default, macOS adds new items to the far left of the menu bar, which is also the location of Ice's always-hidden section. Most apps are configured
-to remember the positions of their items, but some are not. macOS treats the items of these apps as new items each time they appear. This results in
-these items appearing in the always-hidden section, even if they have been previously been moved.
+支持移动的菜单栏项目也可以按住 Command 拖动。某些系统固定项目不支持移动。若同时运行多个菜单栏管理器，请先退出其他管理器再检查排列。
 
-Ice does not currently manage individual items, and in fact cannot, as of the current release. Once issues
-[#6](https://github.com/jordanbaird/Ice/issues/6) and [#26](https://github.com/jordanbaird/Ice/issues/26) are implemented, Ice will be able to
-monitor the items in the menu bar, and move the ones it recognizes to their previous locations, even if macOS rearranges them.
+## 为什么重建后又要求授权
 
-## Ice removed an item
+macOS 会检查应用的签名身份。使用相同 bundle ID、代码签名证书和应用路径进行后续构建，可以减少授权重复。临时签名、证书变化或多份应用可能让系统把构建识别为不同应用。
 
-Ice does not have the ability to move or remove items. It likely got placed in the always-hidden section by macOS. Option + click the Ice icon to show
-the always-hidden section, then Command + drag the item into a different section.
+在「高级」页面检查「辅助功能」和「屏幕录制」状态，再根据应用提示打开对应系统设置。不要为了重试而重置整台 Mac 上其他应用的权限。
 
-## Ice does not remember the order of items
+## 新图标出现的位置
 
-This is not a bug, but a missing feature. It is being tracked in [#26](https://github.com/jordanbaird/Ice/issues/26).
+菜单栏项目页的紫色「新菜单栏项目出现在这里」标记表示新项目的目标分区和插入位置。右键该标记可以选择分区开头或末尾；规则会保存。
 
-## How do I solve the `Ice cannot arrange menu bar items in automatically hidden menu bars` error?
+新项目自动移动及跨区拖拽仍在进行真实交互回归。应用重启后重新出现、标题变化或不可移动的系统项目可能需要手动调整。
 
-1. Open `System Settings` on your Mac
-2. Go to `Control Center`
-3. Select `Never` as shown in the image below
-4. Update your `Menu Bar Items` in `Ice`
-5. Return `Automatically hide and show the menu bar` to your preferred settings
+## 菜单栏自动隐藏或全屏时无法排列
 
-![Disable Menu Bar Hiding](https://github.com/user-attachments/assets/74c1fde6-d310-4fe3-9f2b-703d8ccb636a)
+排列需要实际的菜单栏窗口。先显示菜单栏或离开全屏，再打开「菜单栏项目」进行调整；应用若无法取得项目，应显示当前状态。
+
+## 能完全替代其他菜单栏工具吗
+
+当前是开发版。构建与模型测试已完成部分验证，顶部按钮、下方工具栏点击、自动收起、跨屏幕和缺口屏等交互需要完整实机回归。请按自己的使用场景验收后再决定是否替换。
+
+## 反馈
+
+在 [Barextender Issues](https://github.com/prefect12/barextender/issues) 提交系统版本、应用版本和可复现步骤。请先遮挡截图中的私人信息，不要提交证书、私钥、权限数据库或完整本机日志。
